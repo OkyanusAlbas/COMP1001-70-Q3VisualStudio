@@ -11,7 +11,6 @@
 int get_image_dimensions(FILE* file, int* width, int* height, int* max_val, int* is_binary);
 unsigned char* read_image(FILE* file, int width, int height, int is_binary);
 void write_image(const char* filename, unsigned char* image, int width, int height, int max_val);
-void free_image_memory(unsigned char* image);
 void gaussian_blur(unsigned char* input, unsigned char* output, int width, int height);
 void sobel_edge_detection(unsigned char* input, unsigned char* output, int width, int height);
 
@@ -22,7 +21,7 @@ int main() {
 
     // Loop through all 31 input images
     for (i = 0; i < 31; i++) {
-        // Construct input filename
+        // Construct input filename dynamically based on index
         char input_filename[50];
         sprintf_s(input_filename, sizeof(input_filename), IN, i);
 
@@ -30,14 +29,14 @@ int main() {
         errno_t err = fopen_s(&input_file, input_filename, "r");
         if (err != 0) {
             printf("Error opening file: %s\n", input_filename);
-            continue;
+            continue;  // Skip if the image can't be opened
         }
 
         // Read image dimensions and header
         if (!get_image_dimensions(input_file, &width, &height, &max_val, &is_binary)) {
             printf("Failed to read image: %s\n", input_filename);
             fclose(input_file);
-            continue;
+            continue;  // Skip if dimensions cannot be read
         }
 
         // Read image data
@@ -45,10 +44,10 @@ int main() {
         if (!image) {
             printf("Failed to read image data: %s\n", input_filename);
             fclose(input_file);
-            continue;
+            continue;  // Skip if data can't be read
         }
 
-        // Allocate memory for output images
+        // Allocate memory for output images based on dimensions of the current image
         gaussian_image = (unsigned char*)malloc(width * height * sizeof(unsigned char));
         sobel_image = (unsigned char*)malloc(width * height * sizeof(unsigned char));
 
@@ -56,22 +55,24 @@ int main() {
             printf("Memory allocation failed.\n");
             free(image);
             fclose(input_file);
-            continue;
+            continue;  // Skip if memory allocation fails
         }
 
-        // Apply Gaussian Blur
+        // Apply Gaussian Blur filter to the image
         gaussian_blur(image, gaussian_image, width, height);
-        // Apply Sobel edge detection
+
+        // Apply Sobel edge detection filter to the image
         sobel_edge_detection(image, sobel_image, width, height);
 
-        // Construct output filenames
+        // Construct output filenames dynamically based on image index
         char output_filename[50];
+
+        // Write Gaussian Blur image to file
         sprintf_s(output_filename, sizeof(output_filename), OUT, i);
-        // Write Gaussian Blur image
         write_image(output_filename, gaussian_image, width, height, max_val);
 
+        // Write Sobel edge detection image to file
         sprintf_s(output_filename, sizeof(output_filename), OUT2, i);
-        // Write Sobel edge detection image
         write_image(output_filename, sobel_image, width, height, max_val);
 
         // Free allocated memory
@@ -84,43 +85,61 @@ int main() {
     return 0;
 }
 
-// Function to get image dimensions from PGM header (handle both P2 and P5 formats)
+// Function to get image dimensions from PGM header (handles both P2 and P5 formats)
 int get_image_dimensions(FILE* file, int* width, int* height, int* max_val, int* is_binary) {
     char header[3];
 
     // Read the file header
-    if (fscanf_s(file, "%2s", header, sizeof(header)) != 1) {
-        return 0;  // Couldn't read the header
+    if (fscanf_s(file, "%2s", header, (unsigned int)sizeof(header)) != 1) {
+        printf("Error: Failed to read header.\n");
+        return 0;  // Error reading the header
     }
 
-    // Check for valid PGM formats
+    // Null-terminate the string to avoid issues
+    header[2] = '\0';
+
+    // Debugging output for the header
+    printf("Header: %s\n", header);
+
+    // Check if the header matches expected PGM formats
     if (strcmp(header, "P2") == 0) {
-        *is_binary = 0;  // ASCII PGM
+        *is_binary = 0;  // ASCII format
+        printf("Format: P2 (ASCII)\n");
     }
     else if (strcmp(header, "P5") == 0) {
-        *is_binary = 1;  // Binary PGM
+        *is_binary = 1;  // Binary format
+        printf("Format: P5 (Binary)\n");
     }
     else {
-        printf("Not a valid PGM file\n");
-        return 0;
+        printf("Error: Not a valid PGM file (Header: %s)\n", header);
+        return 0;  // Invalid header
     }
 
     // Read image dimensions and max pixel value
     if (fscanf_s(file, "%d %d", width, height) != 2) {
-        return 0;
-    }
-    if (fscanf_s(file, "%d", max_val) != 1) {
-        return 0;
+        printf("Error: Failed to read image dimensions. File might be malformed.\n");
+        return 0;  // Error reading dimensions
     }
 
-    return 1;
+    if (fscanf_s(file, "%d", max_val) != 1) {
+        printf("Error: Failed to read max pixel value.\n");
+        return 0;  // Error reading max pixel value
+    }
+
+    // Debugging output for dimensions and max value
+    printf("Dimensions: %d x %d, Max value: %d\n", *width, *height, *max_val);
+
+    // Skip over any extra newline characters that might be present
+    while (fgetc(file) != '\n');
+
+    return 1;  // Successfully read dimensions and max value
 }
 
-// Function to read image data from PGM file (handle both P2 and P5)
+// Function to read image data from PGM file (handles both P2 and P5)
 unsigned char* read_image(FILE* file, int width, int height, int is_binary) {
     unsigned char* image = (unsigned char*)malloc(width * height * sizeof(unsigned char));
     if (!image) {
-        return NULL;
+        return NULL;  // Memory allocation failed
     }
 
     if (is_binary) {
@@ -132,7 +151,7 @@ unsigned char* read_image(FILE* file, int width, int height, int is_binary) {
         for (int i = 0; i < width * height; i++) {
             if (fscanf_s(file, "%hhu", &image[i]) != 1) {
                 free(image);
-                return NULL;
+                return NULL;  // Reading failed
             }
         }
     }
@@ -163,11 +182,6 @@ void write_image(const char* filename, unsigned char* image, int width, int heig
     }
 
     fclose(file);
-}
-
-// Function to free dynamically allocated image memory
-void free_image_memory(unsigned char* image) {
-    free(image);
 }
 
 // Function to apply Gaussian Blur filter to an image
@@ -218,7 +232,7 @@ void sobel_edge_detection(unsigned char* input, unsigned char* output, int width
             gx = 0;
             gy = 0;
 
-            // Apply Sobel operator to calculate gradients
+            // Apply Sobel kernel to each pixel
             for (int ky = -1; ky <= 1; ky++) {
                 for (int kx = -1; kx <= 1; kx++) {
                     int pixel = input[(y + ky) * width + (x + kx)];
@@ -227,9 +241,9 @@ void sobel_edge_detection(unsigned char* input, unsigned char* output, int width
                 }
             }
 
-            // Calculate gradient magnitude
+            // Combine the gradients and store the result
             int magnitude = (int)sqrt(gx * gx + gy * gy);
-            output[y * width + x] = magnitude > 255 ? 255 : magnitude;
+            output[y * width + x] = (unsigned char)(magnitude > 255 ? 255 : magnitude);
         }
     }
 }
