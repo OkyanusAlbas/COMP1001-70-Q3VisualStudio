@@ -1,11 +1,7 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
-#include <emmintrin.h>
-#include <limits.h>
-#include <pmmintrin.h>
-#include <immintrin.h>
 
 // Function declarations
 void Gaussian_Blur();
@@ -14,25 +10,14 @@ void read_image(const char* filename);
 void write_image2(const char* filename, unsigned char* output_image);
 void openfile(const char* filename, FILE** finput);
 int getint(FILE* fp);
+void skip_comments(FILE* fp);
 
-// Global variable for header to store the file format
-char header[100];  // This stores the image header (P2, P5, etc.)
-
-// CRITICAL POINT: images' paths - Modify these paths as per your requirements
-#define IN_PATH "C:\\Users\\albao\\documents\\dev\\Question3\\input_images\\"
-#define OUT_PATH "C:\\Users\\albao\\documents\\dev\\Question3\\output_images\\"
-#define OUT2_PATH "C:\\Users\\albao\\documents\\dev\\Question3\\output_images2\\"
-
-// Number of images to process
-#define NUM_IMAGES 31
-
-// Image dimensions (These will be dynamically determined for each image)
-int M, N;
-
-// Dynamically allocated arrays for input and output images
-unsigned char* frame1;  // input image
-unsigned char* filt;    // output filtered image (Gaussian)
-unsigned char* gradient; // output gradient image (Sobel)
+// Global variables
+char header[100]; // This stores the image header (P2, P5, etc.)
+int M, N; // Image dimensions (width and height)
+unsigned char* frame1;  // Input image
+unsigned char* filt;    // Output filtered image (Gaussian)
+unsigned char* gradient; // Output gradient image (Sobel)
 
 // Gaussian mask (5x5)
 const signed char Mask[5][5] = {
@@ -58,13 +43,13 @@ const signed char GyMask[3][3] = {
 
 // Function to process all images
 void process_all_images() {
-    for (int i = 0; i < NUM_IMAGES; i++) {
+    for (int i = 0; i < 31; i++) {
         char input_filename[256], output_filename1[256], output_filename2[256];
 
         // Create filenames based on the image number (a0.pgm to a30.pgm)
-        sprintf_s(input_filename, sizeof(input_filename), "%sa%d.pgm", IN_PATH, i);
-        sprintf_s(output_filename1, sizeof(output_filename1), "%sblurred_a%d.pgm", OUT_PATH, i);
-        sprintf_s(output_filename2, sizeof(output_filename2), "%sedge_detection_a%d.pgm", OUT2_PATH, i);
+        sprintf_s(input_filename, sizeof(input_filename), "C:\\Users\\albao\\documents\\dev\\Question3\\input_images\\a%d.pgm", i);
+        sprintf_s(output_filename1, sizeof(output_filename1), "C:\\Users\\albao\\documents\\dev\\Question3\\output_images\\blurred_a%d.pgm", i);
+        sprintf_s(output_filename2, sizeof(output_filename2), "C:\\Users\\albao\\documents\\dev\\Question3\\output_images2\\edge_detection_a%d.pgm", i);
 
         // Read the image
         read_image(input_filename);
@@ -73,7 +58,7 @@ void process_all_images() {
         Gaussian_Blur();
         Sobel();
 
-        // Write the processed images to the disk
+        // Write the processed images to disk
         write_image2(output_filename1, filt);
         write_image2(output_filename2, gradient);
 
@@ -96,6 +81,7 @@ void Gaussian_Blur() {
     unsigned char pix;
     const unsigned short int size = 2;
 
+    // Apply Gaussian Blur
     for (row = 0; row < N; row++) {
         for (col = 0; col < M; col++) {
             newPixel = 0;
@@ -104,7 +90,7 @@ void Gaussian_Blur() {
                     if ((row + rowOffset < 0) || (row + rowOffset >= N) || (col + colOffset < 0) || (col + colOffset >= M))
                         pix = 0;
                     else
-                        pix = frame1[M * (row + rowOffset) + col + colOffset];
+                        pix = frame1[M * (row + rowOffset) + (col + colOffset)];
 
                     newPixel += pix * Mask[size + rowOffset][size + colOffset];
                 }
@@ -118,6 +104,7 @@ void Sobel() {
     int row, col, rowOffset, colOffset;
     int Gx, Gy;
 
+    // Apply Sobel edge detection
     for (row = 1; row < N - 1; row++) {
         for (col = 1; col < M - 1; col++) {
             Gx = 0;
@@ -125,12 +112,15 @@ void Sobel() {
 
             for (rowOffset = -1; rowOffset <= 1; rowOffset++) {
                 for (colOffset = -1; colOffset <= 1; colOffset++) {
-                    Gx += filt[M * (row + rowOffset) + col + colOffset] * GxMask[rowOffset + 1][colOffset + 1];
-                    Gy += filt[M * (row + rowOffset) + col + colOffset] * GyMask[rowOffset + 1][colOffset + 1];
+                    Gx += filt[M * (row + rowOffset) + (col + colOffset)] * GxMask[rowOffset + 1][colOffset + 1];
+                    Gy += filt[M * (row + rowOffset) + (col + colOffset)] * GyMask[rowOffset + 1][colOffset + 1];
                 }
             }
 
-            gradient[M * row + col] = (unsigned char)sqrt(Gx * Gx + Gy * Gy);
+            // Compute the gradient magnitude and clamp it to [0, 255]
+            int magnitude = (int)sqrt(Gx * Gx + Gy * Gy);
+            if (magnitude > 255) magnitude = 255;  // Ensure the value stays within valid range
+            gradient[M * row + col] = (unsigned char)magnitude;
         }
     }
 }
@@ -144,10 +134,12 @@ void read_image(const char* filename) {
 
     // Parse the header to get image dimensions (P2 or P5 format)
     if ((header[0] == 'P') && (header[1] == '5')) {
+        skip_comments(finput);
         M = getint(finput);  // Read width (M)
         N = getint(finput);  // Read height (N)
     }
     else if ((header[0] == 'P') && (header[1] == '2')) {
+        skip_comments(finput);
         M = getint(finput);  // Read width (M)
         N = getint(finput);  // Read height (N)
     }
@@ -156,10 +148,29 @@ void read_image(const char* filename) {
         exit(EXIT_FAILURE);
     }
 
+    // Debug: Print image dimensions
+    printf("Image dimensions: M = %d, N = %d\n", M, N);
+
+    // Check if image dimensions are valid (non-zero and reasonable)
+    if (M <= 0 || N <= 0) {
+        printf("Error: Invalid image dimensions.\n");
+        exit(EXIT_FAILURE);
+    }
+
     // Dynamically allocate memory for the image
     frame1 = (unsigned char*)malloc(M * N * sizeof(unsigned char));
     filt = (unsigned char*)malloc(M * N * sizeof(unsigned char));
     gradient = (unsigned char*)malloc(M * N * sizeof(unsigned char));
+
+    // Check if memory allocation succeeded
+    if (!frame1 || !filt || !gradient) {
+        printf("Memory allocation failed. Image dimensions are M = %d, N = %d\n", M, N);
+        exit(EXIT_FAILURE);
+    }
+
+    // Initialize memory to avoid using uninitialized memory
+    memset(filt, 0, M * N * sizeof(unsigned char));
+    memset(gradient, 0, M * N * sizeof(unsigned char));
 
     // Read the image data
     for (int j = 0; j < N; j++) {
@@ -178,60 +189,54 @@ void write_image2(const char* filename, unsigned char* output_image) {
 
     printf("Writing result to disk...\n");
 
-    // Open output file
-    if (fopen_s(&foutput, filename, "wb") != 0) {
-        fprintf(stderr, "Unable to open file %s for writing\n", filename);
-        exit(-1);
+    // Open output file in text mode for P2 (ASCII format)
+    if (fopen_s(&foutput, filename, "w") != 0) {
+        fprintf(stderr, "Unable to open the output file: %s\n", filename);
+        exit(EXIT_FAILURE);
     }
 
-    // Write the PGM header
+    // Write PGM header (P2 format)
     fprintf(foutput, "P2\n");
     fprintf(foutput, "%d %d\n", M, N);
     fprintf(foutput, "255\n");
 
-    // Write the pixel data
-    for (int j = 0; j < N; ++j) {
-        for (int i = 0; i < M; ++i) {
-            fprintf(foutput, "%3d ", output_image[M * j + i]);
-            if (i % 32 == 31) fprintf(foutput, "\n");
+    // Write the image data
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < M; j++) {
+            fprintf(foutput, "%d ", output_image[M * i + j]);
         }
-        if (M % 32 != 0) fprintf(foutput, "\n");
+        fprintf(foutput, "\n");
     }
 
     fclose(foutput);
-    printf("Output written to %s\n", filename);
+    printf("Output written successfully: %s\n", filename);
 }
 
 void openfile(const char* filename, FILE** finput) {
-    int x0, y0, x, aa;
-
-    if ((fopen_s(finput, filename, "rb")) != 0) {
-        fprintf(stderr, "Unable to open file %s for reading\n", filename);
-        exit(-1);
+    if (fopen_s(finput, filename, "rb") != 0) {
+        printf("Unable to open the file: %s\n", filename);
+        exit(EXIT_FAILURE);
     }
 
-    aa = fscanf_s(*finput, "%s", header, 20);
+    fgets(header, sizeof(header), *finput);  // Read the PGM header (P2 or P5)
+}
 
-    x0 = getint(*finput); // This is M (width)
-    y0 = getint(*finput); // This is N (height)
-    printf("\tHeader is %s, M=%d, N=%d\n", header, x0, y0);
-
-    x = getint(*finput); // Read and discard the max pixel value
+void skip_comments(FILE* fp) {
+    char c;
+    while ((c = getc(fp)) == '#') {
+        while (getc(fp) != '\n') {} // Skip the rest of the line
+    }
+    ungetc(c, fp); // Put the non-comment character back into the stream
 }
 
 int getint(FILE* fp) {
-    int c, i;
-
-    c = getc(fp);
-    while (c == ' ' || c == '\n' || c == '\t') {
-        c = getc(fp);
-    }
-
+    int i = 0;
+    char c;
+    while ((c = getc(fp)) == ' ' || c == '\n' || c == '\r') {}
     i = 0;
-    while (c >= '0' && c <= '9') {
-        i = (i * 10) + (c - '0');
+    do {
+        i = i * 10 + (c - '0');
         c = getc(fp);
-    }
-
+    } while (c >= '0' && c <= '9');
     return i;
 }
