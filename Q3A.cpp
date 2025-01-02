@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS // Disable deprecation warnings for unsafe functions
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,9 +17,9 @@ void skip_comments(FILE* fp);
 // Global variables
 char header[100]; // This stores the image header (P2, P5, etc.)
 int M, N; // Image dimensions (width and height)
-unsigned char* frame1;  // Input image
-unsigned char* filt;    // Output filtered image (Gaussian)
-unsigned char* gradient; // Output gradient image (Sobel)
+unsigned char* frame1 = NULL;  // Input image (initialized to NULL)
+unsigned char* filt = NULL;    // Output filtered image (Gaussian) (initialized to NULL)
+unsigned char* gradient = NULL; // Output gradient image (Sobel) (initialized to NULL)
 
 // Gaussian mask (5x5)
 const signed char Mask[5][5] = {
@@ -47,9 +49,9 @@ void process_all_images() {
         char input_filename[256], output_filename1[256], output_filename2[256];
 
         // Create filenames based on the image number (a0.pgm to a30.pgm)
-        sprintf_s(input_filename, sizeof(input_filename), "C:\\Users\\albao\\documents\\dev\\Question3\\input_images\\a%d.pgm", i);
-        sprintf_s(output_filename1, sizeof(output_filename1), "C:\\Users\\albao\\documents\\dev\\Question3\\output_images\\blurred_a%d.pgm", i);
-        sprintf_s(output_filename2, sizeof(output_filename2), "C:\\Users\\albao\\documents\\dev\\Question3\\output_images2\\edge_detection_a%d.pgm", i);
+        sprintf(input_filename, "C:\\Users\\albao\\documents\\dev\\Question3\\input_images\\a%d.pgm", i);
+        sprintf(output_filename1, "C:\\Users\\albao\\documents\\dev\\Question3\\output_images\\blurred_a%d.pgm", i);
+        sprintf(output_filename2, "C:\\Users\\albao\\documents\\dev\\Question3\\output_images2\\edge_detection_a%d.pgm", i);
 
         // Read the image
         read_image(input_filename);
@@ -171,6 +173,7 @@ void read_image(const char* filename) {
     // Initialize memory to avoid using uninitialized memory
     memset(filt, 0, M * N * sizeof(unsigned char));
     memset(gradient, 0, M * N * sizeof(unsigned char));
+    memset(frame1, 0, M * N * sizeof(unsigned char));  // Initialize frame1 memory to avoid warnings
 
     // Read the image data
     for (int j = 0; j < N; j++) {
@@ -190,7 +193,8 @@ void write_image2(const char* filename, unsigned char* output_image) {
     printf("Writing result to disk...\n");
 
     // Open output file in text mode for P2 (ASCII format)
-    if (fopen_s(&foutput, filename, "w") != 0) {
+    foutput = fopen(filename, "w");
+    if (!foutput) {
         fprintf(stderr, "Unable to open the output file: %s\n", filename);
         exit(EXIT_FAILURE);
     }
@@ -213,7 +217,8 @@ void write_image2(const char* filename, unsigned char* output_image) {
 }
 
 void openfile(const char* filename, FILE** finput) {
-    if (fopen_s(finput, filename, "rb") != 0) {
+    *finput = fopen(filename, "rb");
+    if (!*finput) {
         printf("Unable to open the file: %s\n", filename);
         exit(EXIT_FAILURE);
     }
